@@ -1,10 +1,8 @@
 # inflate-sol
 
+Gas optimizing fork of inflate-sol
+
 An implementation of [Puff](https://github.com/madler/zlib/blob/master/contrib/puff) in Solidity. This decompresses a [DEFLATE](https://tools.ietf.org/html/rfc1951)-compressed data stream.
-
-## Installing
-
-TODO
 
 ## Usage
 
