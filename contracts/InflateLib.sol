@@ -74,6 +74,7 @@ library InflateLib {
         pure
         returns (ErrorCode, uint256)
     {
+        unchecked{
         // Bit accumulator (can use up to 20 bits)
         uint256 val;
 
@@ -97,9 +98,11 @@ library InflateLib {
         // Return need bits, zeroing the bits above that
         uint256 ret = (val & ((1 << need) - 1));
         return (ErrorCode.ERR_NONE, ret);
+        }
     }
 
     function _stored(State memory s) private pure returns (ErrorCode) {
+        unchecked{
         // Length of stored block
         uint256 len;
 
@@ -140,6 +143,7 @@ library InflateLib {
 
         // Done with a valid stored block
         return ErrorCode.ERR_NONE;
+        }
     }
 
     function _decode(State memory s, Huffman memory h)
@@ -147,6 +151,7 @@ library InflateLib {
         pure
         returns (ErrorCode, uint256)
     {
+        unchecked{
         // Current number of bits in code
         uint256 len;
         // Len bits being decoded
@@ -183,6 +188,7 @@ library InflateLib {
 
         // Ran out of codes
         return (ErrorCode.ERR_INVALID_LENGTH_OR_DISTANCE_CODE, 0);
+        }
     }
 
     function _construct(
@@ -191,6 +197,7 @@ library InflateLib {
         uint256 n,
         uint256 start
     ) private pure returns (ErrorCode) {
+        unchecked{
         // Current symbol when stepping through lengths[]
         uint256 symbol;
         // Current length when stepping through h.counts[]
@@ -246,6 +253,7 @@ library InflateLib {
 
         // Left > 0 means incomplete
         return left > 0 ? ErrorCode.ERR_CONSTRUCT : ErrorCode.ERR_NONE;
+        }
     }
 
     function _codes(
@@ -253,6 +261,7 @@ library InflateLib {
         Huffman memory lencode,
         Huffman memory distcode
     ) private pure returns (ErrorCode) {
+        unchecked{
         // Decoded symbol
         uint256 symbol;
         // Length for copy
@@ -261,139 +270,13 @@ library InflateLib {
         uint256 dist;
         // TODO Solidity doesn't support constant arrays, but these are fixed at compile-time
         // Size base for length codes 257..285
-        uint16[29] memory lens =
-            [
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-                9,
-                10,
-                11,
-                13,
-                15,
-                17,
-                19,
-                23,
-                27,
-                31,
-                35,
-                43,
-                51,
-                59,
-                67,
-                83,
-                99,
-                115,
-                131,
-                163,
-                195,
-                227,
-                258
-            ];
+        uint16[29] memory lens = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
         // Extra bits for length codes 257..285
-        uint8[29] memory lext =
-            [
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1,
-                1,
-                1,
-                1,
-                2,
-                2,
-                2,
-                2,
-                3,
-                3,
-                3,
-                3,
-                4,
-                4,
-                4,
-                4,
-                5,
-                5,
-                5,
-                5,
-                0
-            ];
+        uint8[29] memory lext = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
         // Offset base for distance codes 0..29
-        uint16[30] memory dists =
-            [
-                1,
-                2,
-                3,
-                4,
-                5,
-                7,
-                9,
-                13,
-                17,
-                25,
-                33,
-                49,
-                65,
-                97,
-                129,
-                193,
-                257,
-                385,
-                513,
-                769,
-                1025,
-                1537,
-                2049,
-                3073,
-                4097,
-                6145,
-                8193,
-                12289,
-                16385,
-                24577
-            ];
+        uint16[30] memory dists = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
         // Extra bits for distance codes 0..29
-        uint8[30] memory dext =
-            [
-                0,
-                0,
-                0,
-                0,
-                1,
-                1,
-                2,
-                2,
-                3,
-                3,
-                4,
-                4,
-                5,
-                5,
-                6,
-                6,
-                7,
-                7,
-                8,
-                8,
-                9,
-                9,
-                10,
-                10,
-                11,
-                11,
-                12,
-                12,
-                13,
-                13
-            ];
+        uint8[30] memory dext =[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
         // Error code
         ErrorCode err;
 
@@ -462,9 +345,11 @@ library InflateLib {
 
         // Done with a valid fixed or dynamic block
         return ErrorCode.ERR_NONE;
+        }
     }
 
     function _build_fixed(State memory s) private pure returns (ErrorCode) {
+        unchecked{
         // Build fixed Huffman tables
         // TODO this is all a compile-time constant
         uint256 symbol;
@@ -494,6 +379,7 @@ library InflateLib {
         _construct(s.distcode, lengths, MAXDCODES, 0);
 
         return ErrorCode.ERR_NONE;
+        }
     }
 
     function _fixed(State memory s) private pure returns (ErrorCode) {
@@ -506,6 +392,7 @@ library InflateLib {
         pure
         returns (ErrorCode, uint256[] memory)
     {
+        unchecked{
         uint256 ncode;
         // Index of lengths[]
         uint256 index;
@@ -514,8 +401,7 @@ library InflateLib {
         // Error code
         ErrorCode err;
         // Permutation of code length codes
-        uint8[19] memory order =
-            [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+        uint8[19] memory order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
         (err, ncode) = bits(s, 4);
         if (err != ErrorCode.ERR_NONE) {
@@ -535,6 +421,7 @@ library InflateLib {
         }
 
         return (ErrorCode.ERR_NONE, lengths);
+        }
     }
 
     function _build_dynamic(State memory s)
@@ -546,6 +433,7 @@ library InflateLib {
             Huffman memory
         )
     {
+        unchecked{
         // Number of lengths in descriptor
         uint256 nlen;
         uint256 ndist;
@@ -705,9 +593,11 @@ library InflateLib {
         }
 
         return (ErrorCode.ERR_NONE, lencode, distcode);
+        }
     }
 
     function _dynamic(State memory s) private pure returns (ErrorCode) {
+        unchecked{
         // Length and distance codes
         Huffman memory lencode;
         Huffman memory distcode;
@@ -721,6 +611,7 @@ library InflateLib {
 
         // Decode data until end-of-block code
         return _codes(s, lencode, distcode);
+        }
     }
 
     function puff(bytes calldata source, uint256 destlen)
@@ -728,6 +619,7 @@ library InflateLib {
         pure
         returns (ErrorCode, bytes memory)
     {
+        unchecked{
         // Input/output state
         State memory s =
             State(
@@ -789,5 +681,6 @@ library InflateLib {
         }
 
         return (err, s.output);
+        }
     }
 }
