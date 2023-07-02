@@ -23,7 +23,7 @@
     "chai": "^4.3.0",
     "ethereum-waffle": "^3.2.2",
     "ethers": "^5.0.29",
-    "hardhat": "^2.0.8",
+    "hardhat": "^2.16.1",
     "hardhat-gas-reporter": "^1.0.4",
     "pako": "^2.0.3",
     "prettier": "^2.2.1",
