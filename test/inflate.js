@@ -44,6 +44,7 @@ describe("InflateLibTest", function () {
 
     await tester.deployed();
     const result = await tester.puff(compressed, input.length);
+    const gas_result = await tester.puff_gas(compressed, input.length); //convoluted annoying way to get the testing to actually give me the gas usage, because it just counts it as 0 gas if it doesn't change the state, i guess... i'm sure someone out there knows how to do it better, but I don't!
     const err = result[0];
     const decompressed = result[1];
     expect(err).to.equal(0);
