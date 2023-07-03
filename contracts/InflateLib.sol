@@ -13,6 +13,16 @@ library InflateLib {
     uint256 constant MAXCODES = (MAXLCODES + MAXDCODES);
     // Number of fixed literal/length codes
     uint256 constant FIXLCODES = 288;
+    bytes19 constant order = 0x10111200080709060a050b040c030d020e010f; // Permutation of code length codes - gas savings from const: test 1363870 -> 1363186, deploy 1841982 -> 1818747
+    bytes29 constant lext = 0x0000000000000000010101010202020203030303040404040505050500; // Extra bits for length codes 257..285
+    bytes30 constant dext = 0x000000000101020203030404050506060707080809090a0a0b0b0c0c0d0d; // Extra bits for distance codes 0..29 - lext&dext const gas: test 1363870 -> 1363186, deploy 1818747 -> 1691028
+    bytes29 constant lens = 0x0001020304050607080a0c0e1014181c202830384050607080a0c0e0ff; // Size base for length codes 257..285 - saves: test 1363186 -> 1360138, deploy 1691028 -> 1600817
+    bytes30 constant distsLower = 0x010203040507090d11132131416181c10181010101010101010101010101; // Offset base for distance codes 0..29, lower bytes
+    bytes30 constant distsUpper = 0x00000000000000000000000000000000010102030406080c101820304060; //upper bytes - dists constant saves: test -> 1359399, deploy -> 1562480
+    //so, to store such a long fixed array of ints >255, it's most efficient to split it into lower and upper bytes, then STORE IT AS STRINGS, then convert to bytes
+    //BUT it's still less efficient here since lencode symbols can be iterated over, just switching around places a few times, it contains every value from 0 to 288, mostly sequentially, just cut up a bit
+    //i'll leave this here for reference, because it's a neat hack if it ends up being useful somewhere
+    //string constant lencodeSymbolsLower = string(bytes(hex"000102030405060708090a0b0c0d0e0f1011121314151617000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f18191a1b1c1d1e1f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"));
 
     // Error codes
     enum ErrorCode {
@@ -268,15 +278,6 @@ library InflateLib {
         uint256 len;
         // Distance for copy
         uint256 dist;
-        // TODO Solidity doesn't support constant arrays, but these are fixed at compile-time
-        // Size base for length codes 257..285
-        uint16[29] memory lens = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
-        // Extra bits for length codes 257..285
-        uint8[29] memory lext = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
-        // Offset base for distance codes 0..29
-        uint16[30] memory dists = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
-        // Extra bits for distance codes 0..29
-        uint8[30] memory dext =[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
         // Error code
         ErrorCode err;
 
@@ -306,11 +307,11 @@ library InflateLib {
                     return ErrorCode.ERR_INVALID_LENGTH_OR_DISTANCE_CODE;
                 }
 
-                (err, tempBits) = bits(s, lext[symbol]);
+                (err, tempBits) = bits(s, uint8(lext[symbol]));
                 if (err != ErrorCode.ERR_NONE) {
                     return err;
                 }
-                len = lens[symbol] + tempBits;
+                len = tempBits + uint8(lens[symbol]) + 3;
 
                 // Get and check distance
                 (err, symbol) = _decode(s, distcode);
@@ -318,11 +319,11 @@ library InflateLib {
                     // Invalid symbol
                     return err;
                 }
-                (err, tempBits) = bits(s, dext[symbol]);
+                (err, tempBits) = bits(s, uint8(dext[symbol]));
                 if (err != ErrorCode.ERR_NONE) {
                     return err;
                 }
-                dist = dists[symbol] + tempBits;
+                dist = (uint8(distsUpper[symbol]) << 8) + uint8(distsLower[symbol]) + tempBits;
                 if (dist > s.outcnt) {
                     // Distance too far back
                     return ErrorCode.ERR_DISTANCE_TOO_FAR;
@@ -348,39 +349,69 @@ library InflateLib {
         }
     }
 
-    function _build_fixed(State memory s) private pure returns (ErrorCode) {
+
+    function _build_fixed(State memory s) private pure { //why return an error if it can't error?
         unchecked{
         // Build fixed Huffman tables
-        // TODO this is all a compile-time constant
-        uint256 symbol;
-        uint256[] memory lengths = new uint256[](FIXLCODES);
-
-        // Literal/length table
-        for (symbol = 0; symbol < 144; symbol++) {
-            lengths[symbol] = 8;
+        // this is all constant, doesn't depend on input; i checked, this new code gives the same results
+        // gas change so far: test 1359399 -> 1179272, deploy 1562480 -> 1604821; yes, slightly more on the deploy than it was before with the simple constant arrays, but it's worth it to make it run so much better
+        // overall gas savings test 1363870 -> 1179272, deploy 1841982 -> 1604821
+        uint i;
+        // most of the counts values are 0 so you can just set a few manually because the default value is 0
+        s.distcode.counts[5] = 30;
+        s.lencode.counts[7] = 24;
+        s.lencode.counts[8] = 152;
+        s.lencode.counts[9] = 112;
+        for(i = 0; i < 30; ++i){
+            s.distcode.symbols[i] = i;
         }
-        for (; symbol < 256; symbol++) {
-            lengths[symbol] = 9;
+        //this part *maybe* can be done better, but it's better than the other things I tried, it's a lot better than reading from an array saved in memory like the other arrays were doing before, and also a lot better than even just loading it in from a constant, since the numbers are almost consecutive just with a few breaks
+        int offset = 24;
+        for(i = 0; i < 144; ++i){
+            s.lencode.symbols[uint(offset + int(i))] = i;
         }
-        for (; symbol < 280; symbol++) {
-            lengths[symbol] = 7;
+        offset = 32;
+        for(; i < 256; ++i){
+            s.lencode.symbols[uint(offset + int(i))] = i;
         }
-        for (; symbol < FIXLCODES; symbol++) {
-            lengths[symbol] = 8;
+        offset = -256;
+        for(; i < 280; ++i){
+            s.lencode.symbols[uint(offset + int(i))] = i;
         }
-
-        _construct(s.lencode, lengths, FIXLCODES, 0);
-
-        // Distance table
-        for (symbol = 0; symbol < MAXDCODES; symbol++) {
-            lengths[symbol] = 5;
+        offset = -112;
+        for(; i < 288; ++i){
+            s.lencode.symbols[uint(offset + int(i))] = i;
         }
-
-        _construct(s.distcode, lengths, MAXDCODES, 0);
-
-        return ErrorCode.ERR_NONE;
         }
     }
+
+    /*
+    function _build_fixed(State memory s) private pure { //why return an error if it can't error?
+        unchecked{
+        // Build fixed Huffman tables
+        // this is all constant, doesn't depend on input; i checked, this new code gives the same results
+        uint i;
+        // most of the counts values are 0 so you can just set a few manually because the default value is 0
+        s.distcode.counts[5] = 30;
+        s.lencode.counts[7] = 24;
+        s.lencode.counts[8] = 152;
+        s.lencode.counts[9] = 112;
+        for(i = 0; i < 30; ++i){
+            s.distcode.symbols[i] = i;
+        }
+        //somehow, this is worse, i guess reading from a constant 288 times is just worse than switching for loops a few times, since we're iterating anyway
+        for(i = 0; i < 288; ++i){
+            s.lencode.symbols[i] = uint8(bytes(lencodeSymbolsLower)[i]);
+        }
+        for(i = 0; i<24; ++i){
+            s.lencode.symbols[i] += 256;
+        }
+        for(i = 168; i<176; ++i){
+            s.lencode.symbols[i] += 256;
+        }
+
+        }
+    }*/
 
     function _fixed(State memory s) private pure returns (ErrorCode) {
         // Decode data until end-of-block code
@@ -400,8 +431,6 @@ library InflateLib {
         uint256[] memory lengths = new uint256[](MAXCODES);
         // Error code
         ErrorCode err;
-        // Permutation of code length codes
-        uint8[19] memory order = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
         (err, ncode) = bits(s, 4);
         if (err != ErrorCode.ERR_NONE) {
@@ -411,13 +440,13 @@ library InflateLib {
 
         // Read code length code lengths (really), missing lengths are zero
         for (index = 0; index < ncode; index++) {
-            (err, lengths[order[index]]) = bits(s, 3);
+            (err, lengths[uint8(order[index])]) = bits(s, 3);
             if (err != ErrorCode.ERR_NONE) {
                 return (err, lengths);
             }
         }
         for (; index < 19; index++) {
-            lengths[order[index]] = 0;
+            lengths[uint8(order[index])] = 0;
         }
 
         return (ErrorCode.ERR_NONE, lengths);
@@ -640,10 +669,36 @@ library InflateLib {
         ErrorCode err;
 
         // Build fixed Huffman tables
-        err = _build_fixed(s);
-        if (err != ErrorCode.ERR_NONE) {
-            return (err, s.output);
+
+        _build_fixed(s);
+        /*
+        //test section for checking _build_fixed changes, leaving it for future experimenting
+        State memory s1 =
+            State(
+                new bytes(destlen),
+                0,
+                source,
+                0,
+                0,
+                0,
+                Huffman(new uint256[](MAXBITS + 1), new uint256[](FIXLCODES)),
+                Huffman(new uint256[](MAXBITS + 1), new uint256[](MAXDCODES))
+            );
+        _build_fixed1(s1);
+        uint i;
+        for(i = 0; i < s.lencode.counts.length; ++i){
+            require(s.lencode.counts[i]==s1.lencode.counts[i],"lencode counts wrong");
         }
+        for(i = 0; i < s.lencode.symbols.length; ++i){
+            require(s.lencode.symbols[i]==s1.lencode.symbols[i],"lencode symbols wrong");
+        }
+        for(i = 0; i < s.distcode.counts.length; ++i){
+            require(s.distcode.counts[i]==s1.distcode.counts[i],"distcode counts wrong");
+        }
+        for(i = 0; i < s.distcode.symbols.length; ++i){
+            require(s.distcode.symbols[i]==s1.distcode.symbols[i],"distcode symbols wrong");
+        }*/
+        //again, why check for an error if you hardcoded it to not error?
 
         // Process blocks until last block or error
         while (last == 0) {

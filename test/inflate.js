@@ -37,10 +37,10 @@ describe("InflateLibTest", function () {
     );
     const compressed = pako.deflateRaw(input, { level: 9 });
 
-    console.log("input: ", buf2hex(input.buffer));
-    console.log("");
-    console.log("compr: ", buf2hex(compressed.buffer));
-    console.log("");
+    //console.log("input: ", buf2hex(input.buffer));
+    //console.log("");
+    //console.log("compr: ", buf2hex(compressed.buffer));
+    //console.log("");
 
     await tester.deployed();
     const result = await tester.puff(compressed, input.length);
@@ -49,7 +49,7 @@ describe("InflateLibTest", function () {
     const decompressed = result[1];
     expect(err).to.equal(0);
 
-    console.log(decompressed);
+    //console.log(decompressed);
 
     expect(decompressed.slice(2)).to.equal(buf2hex(input.buffer));
   });
