@@ -19,10 +19,6 @@ library InflateLib {
     bytes29 constant lens = 0x0001020304050607080a0c0e1014181c202830384050607080a0c0e0ff; // Size base for length codes 257..285 - saves: test 1363186 -> 1360138, deploy 1691028 -> 1600817
     bytes30 constant distsLower = 0x010203040507090d11132131416181c10181010101010101010101010101; // Offset base for distance codes 0..29, lower bytes
     bytes30 constant distsUpper = 0x00000000000000000000000000000000010102030406080c101820304060; //upper bytes - dists constant saves: test -> 1359399, deploy -> 1562480
-    //so, to store such a long fixed array of ints >255, it's most efficient to split it into lower and upper bytes, then STORE IT AS STRINGS, then convert to bytes
-    //BUT it's still less efficient here since lencode symbols can be iterated over, just switching around places a few times, it contains every value from 0 to 288, mostly sequentially, just cut up a bit
-    //i'll leave this here for reference, because it's a neat hack if it ends up being useful somewhere
-    //string constant lencodeSymbolsLower = string(bytes(hex"000102030405060708090a0b0c0d0e0f1011121314151617000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f18191a1b1c1d1e1f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"));
 
     // Error codes
     enum ErrorCode {
@@ -353,34 +349,6 @@ library InflateLib {
         }
     }
 
-    /*
-    function _build_fixed(State memory s) private pure { //why return an error if it can't error?
-        unchecked{
-        // Build fixed Huffman tables
-        // this is all constant, doesn't depend on input; i checked, this new code gives the same results
-        uint i;
-        // most of the counts values are 0 so you can just set a few manually because the default value is 0
-        s.distcode.counts[5] = 30;
-        s.lencode.counts[7] = 24;
-        s.lencode.counts[8] = 152;
-        s.lencode.counts[9] = 112;
-        for(i = 0; i < 30; ++i){
-            s.distcode.symbols[i] = i;
-        }
-        //somehow, this is worse, i guess reading from a constant 288 times is just worse than switching for loops a few times, since we're iterating anyway
-        for(i = 0; i < 288; ++i){
-            s.lencode.symbols[i] = uint8(bytes(lencodeSymbolsLower)[i]);
-        }
-        for(i = 0; i<24; ++i){
-            s.lencode.symbols[i] += 256;
-        }
-        for(i = 168; i<176; ++i){
-            s.lencode.symbols[i] += 256;
-        }
-
-        }
-    }*/
-
     // Decode data until end-of-block code
     function _fixed(State memory s) private pure returns (ErrorCode) {
         return _codes(s, s.lencode, s.distcode);
@@ -615,34 +583,6 @@ library InflateLib {
         // Build fixed Huffman tables
 
         _build_fixed(s);
-        /*
-        //test section for checking _build_fixed changes, leaving it for future experimenting
-        State memory s1 =
-            State(
-                new bytes(destlen),
-                0,
-                source,
-                0,
-                0,
-                0,
-                Huffman(new uint256[](MAXBITS + 1), new uint256[](FIXLCODES)),
-                Huffman(new uint256[](MAXBITS + 1), new uint256[](MAXDCODES))
-            );
-        _build_fixed1(s1);
-        uint i;
-        for(i = 0; i < s.lencode.counts.length; ++i){
-            require(s.lencode.counts[i]==s1.lencode.counts[i],"lencode counts wrong");
-        }
-        for(i = 0; i < s.lencode.symbols.length; ++i){
-            require(s.lencode.symbols[i]==s1.lencode.symbols[i],"lencode symbols wrong");
-        }
-        for(i = 0; i < s.distcode.counts.length; ++i){
-            require(s.distcode.counts[i]==s1.distcode.counts[i],"distcode counts wrong");
-        }
-        for(i = 0; i < s.distcode.symbols.length; ++i){
-            require(s.distcode.symbols[i]==s1.distcode.symbols[i],"distcode symbols wrong");
-        }*/
-        //again, why check for an error if you hardcoded it to not error?
 
         // Process blocks until last block or error
         while (last == 0) {
