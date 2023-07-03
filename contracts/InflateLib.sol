@@ -349,7 +349,6 @@ library InflateLib {
         }
     }
 
-
     function _build_fixed(State memory s) private pure { //why return an error if it can't error?
         unchecked{
         // Build fixed Huffman tables
