@@ -45,30 +45,16 @@ library InflateLib {
 
     // Input and output state
     struct State {
-        //////////////////
-        // Output state //
-        //////////////////
-        // Output buffer
-        bytes output;
-        // Bytes written to out so far
-        uint256 outcnt;
-        /////////////////
-        // Input state //
-        /////////////////
-        // Input buffer
-        bytes input;
-        // Bytes read so far
-        uint256 incnt;
-        ////////////////
-        // Temp state //
-        ////////////////
-        // Bit buffer
-        uint256 bitbuf;
-        // Number of bits in bit buffer
-        uint256 bitcnt;
-        //////////////////////////
-        // Static Huffman codes //
-        //////////////////////////
+        // Output state
+        bytes output; // Output buffer
+        uint256 outcnt; // Bytes written to out so far
+        // Input state
+        bytes input; // Input buffer
+        uint256 incnt; // Bytes read so far
+        // Temp state
+        uint256 bitbuf; // Bit buffer
+        uint256 bitcnt; // Number of bits in bit buffer
+        // Static Huffman codes
         Huffman lencode;
         Huffman distcode;
     }
@@ -79,11 +65,7 @@ library InflateLib {
         uint256[] symbols;
     }
 
-    function bits(State memory s, uint256 need)
-        private
-        pure
-        returns (ErrorCode, uint256)
-    {
+    function bits(State memory s, uint256 need) private pure returns (ErrorCode, uint256) {
         unchecked{
         // Bit accumulator (can use up to 20 bits)
         uint256 val;
@@ -156,11 +138,7 @@ library InflateLib {
         }
     }
 
-    function _decode(State memory s, Huffman memory h)
-        private
-        pure
-        returns (ErrorCode, uint256)
-    {
+    function _decode(State memory s, Huffman memory h) private pure returns (ErrorCode, uint256) {
         unchecked{
         // Current number of bits in code
         uint256 len;
@@ -175,7 +153,7 @@ library InflateLib {
         // Error code
         ErrorCode err;
 
-        for (len = 1; len <= MAXBITS; len++) {
+        for (len = 1; len <= MAXBITS; ++len) {
             // Get next bit
             uint256 tempCode;
             (err, tempCode) = bits(s, 1);
@@ -201,12 +179,7 @@ library InflateLib {
         }
     }
 
-    function _construct(
-        Huffman memory h,
-        uint256[] memory lengths,
-        uint256 n,
-        uint256 start
-    ) private pure returns (ErrorCode) {
+    function _construct(Huffman memory h, uint256[] memory lengths, uint256 n, uint256 start) private pure returns (ErrorCode) {
         unchecked{
         // Current symbol when stepping through lengths[]
         uint256 symbol;
@@ -218,12 +191,12 @@ library InflateLib {
         uint256[MAXBITS + 1] memory offs;
 
         // Count number of codes of each length
-        for (len = 0; len <= MAXBITS; len++) {
+        for (len = 0; len <= MAXBITS; ++len) {
             h.counts[len] = 0;
         }
-        for (symbol = 0; symbol < n; symbol++) {
+        for (symbol = 0; symbol < n; ++symbol) {
             // Assumes lengths are within bounds
-            h.counts[lengths[start + symbol]]++;
+            ++h.counts[lengths[start + symbol]];
         }
         // No codes!
         if (h.counts[0] == n) {
@@ -236,7 +209,7 @@ library InflateLib {
         // One possible code of zero length
         left = 1;
 
-        for (len = 1; len <= MAXBITS; len++) {
+        for (len = 1; len <= MAXBITS; ++len) {
             // One more bit, double codes left
             left <<= 1;
             if (left < h.counts[len]) {
@@ -250,12 +223,12 @@ library InflateLib {
 
         // Generate offsets into symbol table for each length for sorting
         offs[1] = 0;
-        for (len = 1; len < MAXBITS; len++) {
+        for (len = 1; len < MAXBITS; ++len) {
             offs[len + 1] = offs[len] + h.counts[len];
         }
 
         // Put symbols in table sorted by length, by symbol order within each length
-        for (symbol = 0; symbol < n; symbol++) {
+        for (symbol = 0; symbol < n; ++symbol) {
             if (lengths[start + symbol] != 0) {
                 h.symbols[offs[lengths[start + symbol]]++] = symbol;
             }
@@ -266,11 +239,7 @@ library InflateLib {
         }
     }
 
-    function _codes(
-        State memory s,
-        Huffman memory lencode,
-        Huffman memory distcode
-    ) private pure returns (ErrorCode) {
+    function _codes(State memory s, Huffman memory lencode, Huffman memory distcode) private pure returns (ErrorCode) {
         unchecked{
         // Decoded symbol
         uint256 symbol;
@@ -296,7 +265,7 @@ library InflateLib {
                     return ErrorCode.ERR_OUTPUT_EXHAUSTED;
                 }
                 s.output[s.outcnt] = bytes1(uint8(symbol));
-                s.outcnt++;
+                ++s.outcnt;
             } else if (symbol > 256) {
                 uint256 tempBits;
                 // Length
@@ -337,7 +306,7 @@ library InflateLib {
                     // Note: Solidity reverts on underflow, so we decrement here
                     len -= 1;
                     s.output[s.outcnt] = s.output[s.outcnt - dist];
-                    s.outcnt++;
+                    ++s.outcnt;
                 }
             } else {
                 s.outcnt += len;
@@ -412,16 +381,12 @@ library InflateLib {
         }
     }*/
 
+    // Decode data until end-of-block code
     function _fixed(State memory s) private pure returns (ErrorCode) {
-        // Decode data until end-of-block code
         return _codes(s, s.lencode, s.distcode);
     }
 
-    function _build_dynamic_lengths(State memory s)
-        private
-        pure
-        returns (ErrorCode, uint256[] memory)
-    {
+    function _build_dynamic_lengths(State memory s) private pure returns (ErrorCode, uint256[] memory) {
         unchecked{
         uint256 ncode;
         // Index of lengths[]
@@ -438,13 +403,13 @@ library InflateLib {
         ncode += 4;
 
         // Read code length code lengths (really), missing lengths are zero
-        for (index = 0; index < ncode; index++) {
+        for (index = 0; index < ncode; ++index) {
             (err, lengths[uint8(order[index])]) = bits(s, 3);
             if (err != ErrorCode.ERR_NONE) {
                 return (err, lengths);
             }
         }
-        for (; index < 19; index++) {
+        for (; index < 19; ++index) {
             lengths[uint8(order[index])] = 0;
         }
 
@@ -452,15 +417,7 @@ library InflateLib {
         }
     }
 
-    function _build_dynamic(State memory s)
-        private
-        pure
-        returns (
-            ErrorCode,
-            Huffman memory,
-            Huffman memory
-        )
-    {
+    function _build_dynamic(State memory s) private pure returns (ErrorCode, Huffman memory, Huffman memory) {
         unchecked{
         // Number of lengths in descriptor
         uint256 nlen;
@@ -642,24 +599,12 @@ library InflateLib {
         }
     }
 
-    function puff(bytes calldata source, uint256 destlen)
-        internal
-        pure
-        returns (ErrorCode, bytes memory)
-    {
+    function puff(bytes calldata source, uint256 destlen) internal pure returns (ErrorCode, bytes memory) {
         unchecked{
         // Input/output state
-        State memory s =
-            State(
-                new bytes(destlen),
-                0,
-                source,
-                0,
-                0,
-                0,
+        State memory s =State(new bytes(destlen),0,source,0,0,0,
                 Huffman(new uint256[](MAXBITS + 1), new uint256[](FIXLCODES)),
-                Huffman(new uint256[](MAXBITS + 1), new uint256[](MAXDCODES))
-            );
+                Huffman(new uint256[](MAXBITS + 1), new uint256[](MAXDCODES)));
         // Temp: last bit
         uint256 last;
         // Temp: block type bit
